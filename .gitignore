@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.astro/
+dev-server.log
+dev-server.err.log
+.env
+.env.*
+!.env.example
+.DS_Store

@@ -1,0 +1,16 @@
+---
+import '../styles/global.css';
+import MemoryMapApp from '../components/MemoryMapApp';
+---
+
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="写真の場所と時間を読み取り、思い出を4Dマップとして再構成するWebアプリ。" />
+    <title>Memory Map 4D</title>
+  </head>
+  <body>
+    <MemoryMapApp client:only="react" />
+  </body>
+</html>
