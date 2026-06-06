@@ -192,6 +192,54 @@ function unique<T>(values: T[]) {
   return Array.from(new Set(values));
 }
 
+function authErrorMessage(message: string) {
+  if (/invalid login credentials/i.test(message)) return 'メールアドレスまたはパスワードが正しくありません。';
+  if (/email not confirmed/i.test(message)) return 'メールアドレスの確認が完了していません。確認メールのリンクを開いてください。';
+  if (/user already registered/i.test(message)) return 'このメールアドレスは既に登録されています。ログインしてください。';
+  if (/password should be at least/i.test(message)) return 'パスワードは6文字以上で入力してください。';
+  if (/provider is not enabled/i.test(message)) return 'Googleログインは現在利用できません（Supabaseで未設定です）。';
+  return message;
+}
+
+function rowToMemory(row: Record<string, any>): Memory {
+  return {
+    id: row.id,
+    title: row.title,
+    placeName: row.place_name ?? '',
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    visitedAt: row.visited_at,
+    people: row.people ?? '',
+    memo: row.memo ?? '',
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    emotion: row.emotion ?? '',
+    imageUrl: row.image_url || assetImage,
+    imagePath: row.image_path ?? '',
+    locationSource: (row.location_source ?? 'manual') as LocationSource,
+    exifDetected: Boolean(row.exif_detected),
+    createdAt: row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function memoryToRow(memory: DraftMemory, userId: string) {
+  return {
+    user_id: userId,
+    title: memory.title,
+    place_name: memory.placeName,
+    latitude: memory.latitude,
+    longitude: memory.longitude,
+    visited_at: memory.visitedAt,
+    people: memory.people,
+    memo: memory.memo,
+    tags: memory.tags,
+    emotion: memory.emotion,
+    image_url: memory.imageUrl,
+    image_path: memory.imagePath ?? '',
+    location_source: memory.locationSource,
+    exif_detected: memory.exifDetected,
+  };
+}
+
 function createDraftFromMemory(memory?: Memory): DraftMemory {
   return memory
     ? { ...memory }
@@ -383,31 +431,70 @@ function IconButton({
 }
 
 function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
-  const [email, setEmail] = useState('demo@memory-map.local');
-  const [password, setPassword] = useState('memory4d');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [message, setMessage] = useState('');
+  const [info, setInfo] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const submit = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
     setMessage('');
+    setInfo('');
 
-    if (hasSupabaseConfig && supabase) {
-      const result =
-        mode === 'login'
-          ? await supabase.auth.signInWithPassword({ email, password })
-          : await supabase.auth.signUp({ email, password });
-
-      if (result.error) {
-        setMessage(result.error.message);
-        return;
-      }
+    if (!hasSupabaseConfig || !supabase) {
+      localStorage.setItem(authKey, JSON.stringify({ email }));
+      onSignedIn();
+      return;
     }
 
-    localStorage.setItem(authKey, JSON.stringify({ email }));
-    onSignedIn();
+    setSubmitting(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          setMessage(authErrorMessage(error.message));
+          return;
+        }
+        onSignedIn();
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          setMessage(authErrorMessage(error.message));
+          return;
+        }
+        if (!data.session) {
+          setInfo('確認メールを送信しました。メール内のリンクから登録を完了してください。');
+          setMode('login');
+          return;
+        }
+        onSignedIn();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setMessage('');
+    setInfo('');
+
+    if (!hasSupabaseConfig || !supabase) {
+      localStorage.setItem(authKey, JSON.stringify({ email: 'google-demo' }));
+      onSignedIn();
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      setMessage(authErrorMessage(error.message));
+    }
   };
 
   /* Floating pin positions for the hero image */
@@ -504,13 +591,15 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
             </div>
 
             {message && <p className="text-sm text-[#dc2626] bg-[#fef2f2] border border-[#fecaca] rounded-lg px-4 py-2.5">{message}</p>}
+            {info && <p className="text-sm text-[#047857] bg-[#ecfdf5] border border-[#a7f3d0] rounded-lg px-4 py-2.5">{info}</p>}
 
             {/* Login Button */}
             <button
               type="submit"
-              className="flex h-12 w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-sm font-bold text-white shadow-md shadow-blue-500/25 transition hover:shadow-lg hover:shadow-blue-500/30 hover:from-[#2563EB] hover:to-[#1D4ED8] active:scale-[0.98]"
+              disabled={submitting}
+              className="flex h-12 w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-sm font-bold text-white shadow-md shadow-blue-500/25 transition hover:shadow-lg hover:shadow-blue-500/30 hover:from-[#2563EB] hover:to-[#1D4ED8] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              ログイン
+              {submitting ? '処理中...' : mode === 'login' ? 'ログイン' : '新規登録'}
             </button>
 
             {/* Divider */}
@@ -523,7 +612,7 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
             {/* Google Login */}
             <button
               type="button"
-              onClick={submit}
+              onClick={signInWithGoogle}
               className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-[#d1d5db] bg-white text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb] hover:border-[#9ca3af] active:scale-[0.98]"
             >
               <svg width="20" height="20" viewBox="0 0 48 48">
@@ -1372,6 +1461,7 @@ function BottomNav({ view, setView }: { view: View; setView: (view: View) => voi
 
 export default function MemoryMapApp() {
   const [signedIn, setSignedIn] = useState(false);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
   const [view, setView] = useState<View>('map');
   const [memories, setMemories] = useState<Memory[]>(defaultMemories);
   const [selectedId, setSelectedId] = useState<string | undefined>(defaultMemories[0]?.id);
@@ -1382,6 +1472,18 @@ export default function MemoryMapApp() {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(true);
 
   useEffect(() => {
+    if (hasSupabaseConfig && supabase) {
+      supabase.auth.getSession().then(({ data }) => {
+        setSignedIn(Boolean(data.session));
+        setUserId(data.session?.user.id);
+      });
+      const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSignedIn(Boolean(session));
+        setUserId(session?.user?.id);
+      });
+      return () => subscription.subscription.unsubscribe();
+    }
+
     setSignedIn(Boolean(localStorage.getItem(authKey)));
     const saved = localStorage.getItem(storageKey);
     if (saved) {
@@ -1398,6 +1500,29 @@ export default function MemoryMapApp() {
   }, []);
 
   useEffect(() => {
+    if (!(hasSupabaseConfig && supabase) || !userId) return;
+    let active = true;
+    supabase
+      .from('memories')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.error('思い出の読み込みに失敗しました', error);
+          return;
+        }
+        const mapped = (data ?? []).map(rowToMemory);
+        setMemories(mapped);
+        setSelectedId(mapped[0]?.id);
+      });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  useEffect(() => {
+    if (hasSupabaseConfig) return;
     localStorage.setItem(storageKey, JSON.stringify(memories));
   }, [memories]);
 
@@ -1527,29 +1652,53 @@ export default function MemoryMapApp() {
     setView('form');
   };
 
-  const saveDraft = () => {
+  const saveDraft = async () => {
     if (!draft.title.trim()) return;
 
-    if (draft.id) {
+    const normalized: DraftMemory = {
+      ...draft,
+      title: draft.title.trim(),
+      placeName: draft.placeName.trim(),
+    };
+
+    if (hasSupabaseConfig && supabase && userId) {
+      if (draft.id) {
+        const { data, error } = await supabase
+          .from('memories')
+          .update({ ...memoryToRow(normalized, userId), updated_at: new Date().toISOString() })
+          .eq('id', draft.id)
+          .select()
+          .single();
+        if (error || !data) {
+          alert(`保存に失敗しました: ${error?.message ?? '不明なエラー'}`);
+          return;
+        }
+        const saved = rowToMemory(data);
+        setMemories((current) => current.map((memory) => (memory.id === saved.id ? saved : memory)));
+        setSelectedId(saved.id);
+      } else {
+        const { data, error } = await supabase
+          .from('memories')
+          .insert(memoryToRow(normalized, userId))
+          .select()
+          .single();
+        if (error || !data) {
+          alert(`保存に失敗しました: ${error?.message ?? '不明なエラー'}`);
+          return;
+        }
+        const saved = rowToMemory(data);
+        setMemories((current) => [saved, ...current]);
+        setSelectedId(saved.id);
+      }
+    } else if (draft.id) {
       setMemories((current) =>
-        current.map((memory) =>
-          memory.id === draft.id
-            ? {
-                ...memory,
-                ...draft,
-                title: draft.title.trim(),
-                placeName: draft.placeName.trim(),
-              }
-            : memory,
-        ),
+        current.map((memory) => (memory.id === draft.id ? { ...memory, ...normalized } : memory)),
       );
       setSelectedId(draft.id);
     } else {
       const memory: Memory = {
-        ...draft,
+        ...normalized,
         id: crypto.randomUUID(),
-        title: draft.title.trim(),
-        placeName: draft.placeName.trim(),
         createdAt: new Date().toISOString(),
       };
       setMemories((current) => [memory, ...current]);
@@ -1562,7 +1711,14 @@ export default function MemoryMapApp() {
     setView('map');
   };
 
-  const deleteMemory = (id: string) => {
+  const deleteMemory = async (id: string) => {
+    if (hasSupabaseConfig && supabase && userId) {
+      const { error } = await supabase.from('memories').delete().eq('id', id);
+      if (error) {
+        alert(`削除に失敗しました: ${error.message}`);
+        return;
+      }
+    }
     setMemories((current) => current.filter((memory) => memory.id !== id));
     const next = memories.find((memory) => memory.id !== id);
     setSelectedId(next?.id);
@@ -1571,6 +1727,7 @@ export default function MemoryMapApp() {
   const logout = async () => {
     if (hasSupabaseConfig && supabase) await supabase.auth.signOut();
     localStorage.removeItem(authKey);
+    setUserId(undefined);
     setSignedIn(false);
   };
 

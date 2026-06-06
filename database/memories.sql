@@ -8,7 +8,7 @@ create table if not exists memories (
   visited_at date not null,
   people text,
   memo text,
-  tag text,
+  tags text[] not null default '{}',
   emotion text,
   image_url text,
   image_path text,

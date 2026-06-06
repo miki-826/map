@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.vercel/
 .astro/
 dev-server.log
 dev-server.err.log
