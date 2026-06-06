@@ -107,16 +107,16 @@ button {
 @keyframes floatPin {
   0%, 100% {
     transform: translateY(0);
-    filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.3));
+    filter: drop-shadow(0 3px 10px rgba(15, 36, 52, 0.2));
   }
   50% {
-    transform: translateY(-12px);
-    filter: drop-shadow(0 12px 20px rgba(59, 130, 246, 0.15));
+    transform: translateY(-6px);
+    filter: drop-shadow(0 8px 14px rgba(15, 36, 52, 0.16));
   }
 }
 
 .login-floating-pin {
-  animation: floatPin 3s ease-in-out infinite;
+  animation: floatPin 4s ease-in-out infinite;
   z-index: 5;
   pointer-events: none;
 }

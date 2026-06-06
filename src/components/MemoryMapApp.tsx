@@ -528,12 +528,9 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
 
   /* Floating pin positions for the hero image */
   const pinPositions = [
-    { top: '18%', left: '15%', delay: '0s' },
-    { top: '32%', left: '72%', delay: '0.4s' },
-    { top: '55%', left: '25%', delay: '0.8s' },
-    { top: '40%', left: '88%', delay: '1.2s' },
-    { top: '70%', left: '65%', delay: '0.6s' },
-    { top: '25%', left: '45%', delay: '1.0s' },
+    { top: '34%', left: '74%', delay: '0s' },
+    { top: '46%', left: '90%', delay: '0.5s' },
+    { top: '72%', left: '64%', delay: '1s' },
   ];
 
   return (
@@ -686,9 +683,9 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
               className="login-floating-pin absolute"
               style={{ top: pin.top, left: pin.left, animationDelay: pin.delay }}
             >
-              <svg width="32" height="40" viewBox="0 0 32 40" fill="none">
-                <path d="M16 0C7.16 0 0 7.16 0 16c0 12 16 24 16 24s16-12 16-24C32 7.16 24.84 0 16 0z" fill="white" fillOpacity="0.85"/>
-                <circle cx="16" cy="14" r="5" fill="#3B82F6"/>
+              <svg width="26" height="32" viewBox="0 0 32 40" fill="none" aria-hidden="true">
+                <path d="M16 0C7.16 0 0 7.16 0 16c0 12 16 24 16 24s16-12 16-24C32 7.16 24.84 0 16 0z" fill="white" fillOpacity="0.86"/>
+                <circle cx="16" cy="14" r="5" fill="#3B82F6" fillOpacity="0.92"/>
               </svg>
             </div>
           ))}
