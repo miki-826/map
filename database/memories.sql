@@ -20,9 +20,32 @@ create table if not exists memories (
   updated_at timestamp with time zone default now()
 );
 
-alter table memories drop column if exists tag;
 alter table memories add column if not exists tags text[] not null default '{}';
 alter table memories alter column tags set default '{}';
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'memories'
+      and column_name = 'tag'
+  ) then
+    execute $sql$
+      update memories
+      set tags = coalesce(
+        string_to_array(nullif(trim(regexp_replace(coalesce(tag, ''), '[#、,\s]+', ' ', 'g')), ''), ' '),
+        '{}'
+      )
+      where tags = '{}'
+        and coalesce(tag, '') <> ''
+    $sql$;
+    execute 'alter table memories drop column tag';
+  end if;
+end $$;
+
+notify pgrst, 'reload schema';
 
 alter table memories enable row level security;
 

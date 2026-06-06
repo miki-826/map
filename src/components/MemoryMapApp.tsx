@@ -218,7 +218,7 @@ function rowToMemory(row: Record<string, any>): Memory {
     visitedAt: row.visited_at,
     people: row.people ?? '',
     memo: row.memo ?? '',
-    tags: Array.isArray(row.tags) ? row.tags : [],
+    tags: Array.isArray(row.tags) ? row.tags : parseTags(row.tag ?? ''),
     emotion: row.emotion ?? '',
     imageUrl: row.image_url || assetImage,
     imagePath: row.image_path ?? '',
@@ -245,6 +245,21 @@ function memoryToRow(memory: DraftMemory, userId: string) {
     location_source: memory.locationSource,
     exif_detected: memory.exifDetected,
   };
+}
+
+function memoryToLegacyRow(memory: DraftMemory, userId: string) {
+  const { tags, ...row } = memoryToRow(memory, userId);
+  return {
+    ...row,
+    tag: tags.join(' '),
+  };
+}
+
+function isMissingTagsColumnError(error: { message?: string; code?: string } | null) {
+  return Boolean(
+    error?.code === 'PGRST204' ||
+      /tags.*column|column.*tags|schema cache/i.test(error?.message ?? ''),
+  );
 }
 
 function createDraftFromMemory(memory?: Memory): DraftMemory {
@@ -1753,12 +1768,22 @@ export default function MemoryMapApp() {
 
     if (hasSupabaseConfig && supabase && userId) {
       if (draft.id) {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('memories')
           .update({ ...memoryToRow(normalized, userId), updated_at: new Date().toISOString() })
           .eq('id', draft.id)
           .select()
           .single();
+        if (isMissingTagsColumnError(error)) {
+          const fallback = await supabase
+            .from('memories')
+            .update({ ...memoryToLegacyRow(normalized, userId), updated_at: new Date().toISOString() })
+            .eq('id', draft.id)
+            .select()
+            .single();
+          data = fallback.data;
+          error = fallback.error;
+        }
         if (error || !data) {
           alert(`保存に失敗しました: ${error?.message ?? '不明なエラー'}`);
           return;
@@ -1767,11 +1792,20 @@ export default function MemoryMapApp() {
         setMemories((current) => current.map((memory) => (memory.id === saved.id ? saved : memory)));
         setSelectedId(saved.id);
       } else {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('memories')
           .insert(memoryToRow(normalized, userId))
           .select()
           .single();
+        if (isMissingTagsColumnError(error)) {
+          const fallback = await supabase
+            .from('memories')
+            .insert(memoryToLegacyRow(normalized, userId))
+            .select()
+            .single();
+          data = fallback.data;
+          error = fallback.error;
+        }
         if (error || !data) {
           alert(`保存に失敗しました: ${error?.message ?? '不明なエラー'}`);
           return;
