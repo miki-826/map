@@ -39,6 +39,7 @@ http://localhost:4321
 ```text
 PUBLIC_SUPABASE_URL=
 PUBLIC_SUPABASE_ANON_KEY=
+GEMINI_API_KEY=
 ```
 
 DBとRLSのSQLは `database/memories.sql` にあります。

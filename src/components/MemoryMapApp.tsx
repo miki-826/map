@@ -8,11 +8,15 @@ import {
   ChevronRight,
   Clock3,
   Edit3,
+  Eye,
+  EyeOff,
   Heart,
   ImagePlus,
   Layers3,
   LocateFixed,
+  LockKeyhole,
   LogOut,
+  Mail,
   Map,
   MapPin,
   Menu,
@@ -21,6 +25,7 @@ import {
   Save,
   Search,
   Settings,
+  ShieldCheck,
   Sparkles,
   Tag,
   Trash2,
@@ -76,6 +81,8 @@ type LatLng = {
 const assetImage = '/assets/memory-map-reference.png';
 const storageKey = 'memory-map-4d.memories.v1';
 const authKey = 'memory-map-4d.auth.v1';
+const maxUploadBytes = 8 * 1024 * 1024;
+const acceptedImageTypes = new Set(['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp']);
 
 const defaultMemories: Memory[] = [
   {
@@ -434,7 +441,6 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [message, setMessage] = useState('');
   const [info, setInfo] = useState('');
@@ -497,6 +503,34 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
     }
   };
 
+  const sendPasswordReset = async () => {
+    setMessage('');
+    setInfo('');
+
+    if (!email.trim()) {
+      setMessage('パスワード再設定にはメールアドレスを入力してください。');
+      return;
+    }
+    if (!hasSupabaseConfig || !supabase) {
+      setInfo('デモモードではパスワード再設定は利用できません。');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        setMessage(authErrorMessage(error.message));
+        return;
+      }
+      setInfo('パスワード再設定メールを送信しました。メール内のリンクを開いてください。');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   /* Floating pin positions for the hero image */
   const pinPositions = [
     { top: '18%', left: '15%', delay: '0s' },
@@ -508,16 +542,15 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
   ];
 
   return (
-    <main className="min-h-screen bg-[#f0f4f8]">
-      <div className="mx-auto grid min-h-screen max-w-[1400px] overflow-hidden bg-white shadow-panel md:min-h-[calc(100vh-40px)] md:my-5 md:rounded-2xl lg:grid-cols-[1fr_1.15fr]">
+    <main className="min-h-screen bg-[#eef6f8] px-0 md:px-5">
+      <div className="mx-auto grid min-h-screen max-w-[1420px] overflow-hidden bg-white shadow-panel md:my-5 md:min-h-[calc(100vh-40px)] md:rounded-lg lg:grid-cols-[0.92fr_1.08fr]">
         {/* ── Left: Login Form ── */}
-        <section className="flex flex-col justify-center px-8 py-10 sm:px-12 md:px-16 lg:px-20">
+        <section className="flex flex-col justify-center px-6 py-8 sm:px-10 md:px-14 lg:px-16">
           {/* Logo */}
-          <div className="mb-10 flex items-center gap-3">
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" className="shrink-0">
-              <path d="M18 2C12.48 2 8 6.48 8 12c0 7.5 10 20 10 20s10-12.5 10-20c0-5.52-4.48-10-10-10z" fill="#3B82F6"/>
-              <circle cx="18" cy="12" r="4" fill="white"/>
-            </svg>
+          <div className="mb-9 flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-[#e6f6f9] text-[#0796ac] ring-1 ring-[#bfe6ed]">
+              <MapPin size={24} />
+            </span>
             <div>
               <p className="text-xl font-bold text-[#13283a]">Memory Map 4D</p>
               <p className="text-sm text-[#647586]">場所・人・記憶・時間を、ひとつの地図に。</p>
@@ -525,7 +558,18 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
           </div>
 
           {/* Heading */}
-          <h1 className="mb-8 text-2xl font-bold text-[#13283a]">ログイン</h1>
+          <div className="mb-8">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-[#dce7ee] bg-[#f7fbfc] px-3 py-2 text-xs font-bold text-[#067f95]">
+              <ShieldCheck size={15} />
+              {hasSupabaseConfig ? 'Supabase Auth connected' : 'Demo mode'}
+            </div>
+            <h1 className="text-3xl font-bold leading-tight text-[#13283a]">
+              {mode === 'login' ? '思い出の地図へ戻る' : '4Dの記録をはじめる'}
+            </h1>
+            <p className="mt-3 text-sm leading-7 text-[#647586]">
+              写真に眠る場所と時間を読み取り、あなただけのマップに安全に保存します。
+            </p>
+          </div>
 
           <form onSubmit={submit} className="space-y-5">
             {/* Email */}
@@ -533,14 +577,16 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
               <label className="mb-2 block text-sm font-semibold text-[#13283a]">メールアドレス</label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  <Mail size={18} />
                 </span>
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   type="email"
+                  required
+                  autoComplete="email"
                   placeholder="メールアドレスを入力"
-                  className="h-12 w-full rounded-lg border border-[#d1d5db] bg-white pl-11 pr-4 text-sm outline-none transition focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+                  className="h-12 w-full rounded-md border border-[#cfdde5] bg-white pl-11 pr-4 text-sm outline-none transition focus:border-[#0796ac] focus:ring-2 focus:ring-[#0796ac]/20"
                 />
               </div>
             </div>
@@ -550,54 +596,53 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
               <label className="mb-2 block text-sm font-semibold text-[#13283a]">パスワード</label>
               <div className="relative">
                 <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9ca3af]">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  <LockKeyhole size={18} />
                 </span>
                 <input
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   placeholder="パスワードを入力"
-                  className="h-12 w-full rounded-lg border border-[#d1d5db] bg-white pl-11 pr-11 text-sm outline-none transition focus:border-[#3B82F6] focus:ring-2 focus:ring-[#3B82F6]/20"
+                  className="h-12 w-full rounded-md border border-[#cfdde5] bg-white pl-11 pr-11 text-sm outline-none transition focus:border-[#0796ac] focus:ring-2 focus:ring-[#0796ac]/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#6b7280] transition"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#9ca3af] transition hover:text-[#284457]"
                   aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+                  title={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
                 >
-                  {showPassword ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  )}
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
 
-            {/* Remember + Forgot */}
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-2 cursor-pointer select-none text-[#4b5563]">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-[#d1d5db] text-[#3B82F6] accent-[#3B82F6]"
-                />
-                ログインしたままにする
-              </label>
-              <button type="button" className="font-semibold text-[#3B82F6] hover:text-[#2563EB] transition">
-                パスワードをお忘れの方
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="inline-flex items-center gap-2 text-[#647586]">
+                <CheckCircle2 size={16} className="text-[#0796ac]" />
+                RLSで自分の記録だけを表示
+              </span>
+              <button
+                type="button"
+                onClick={sendPasswordReset}
+                disabled={submitting}
+                className="font-semibold text-[#067f95] transition hover:text-[#045f70] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                パスワード再設定
               </button>
             </div>
 
-            {message && <p className="text-sm text-[#dc2626] bg-[#fef2f2] border border-[#fecaca] rounded-lg px-4 py-2.5">{message}</p>}
-            {info && <p className="text-sm text-[#047857] bg-[#ecfdf5] border border-[#a7f3d0] rounded-lg px-4 py-2.5">{info}</p>}
+            {message && <p className="rounded-md border border-[#fecaca] bg-[#fef2f2] px-4 py-2.5 text-sm text-[#dc2626]">{message}</p>}
+            {info && <p className="rounded-md border border-[#a7f3d0] bg-[#ecfdf5] px-4 py-2.5 text-sm text-[#047857]">{info}</p>}
 
             {/* Login Button */}
             <button
               type="submit"
               disabled={submitting}
-              className="flex h-12 w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#3B82F6] to-[#2563EB] text-sm font-bold text-white shadow-md shadow-blue-500/25 transition hover:shadow-lg hover:shadow-blue-500/30 hover:from-[#2563EB] hover:to-[#1D4ED8] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#0796ac] text-sm font-bold text-white shadow-md shadow-[#0796ac]/25 transition hover:bg-[#067f95] hover:shadow-lg hover:shadow-[#0796ac]/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? '処理中...' : mode === 'login' ? 'ログイン' : '新規登録'}
             </button>
@@ -613,7 +658,8 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
             <button
               type="button"
               onClick={signInWithGoogle}
-              className="flex h-12 w-full items-center justify-center gap-3 rounded-lg border border-[#d1d5db] bg-white text-sm font-semibold text-[#374151] transition hover:bg-[#f9fafb] hover:border-[#9ca3af] active:scale-[0.98]"
+              disabled={submitting}
+              className="flex h-12 w-full items-center justify-center gap-3 rounded-md border border-[#cfdde5] bg-white text-sm font-semibold text-[#284457] transition hover:border-[#9bb5c3] hover:bg-[#f7fbfc] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <svg width="20" height="20" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -629,14 +675,14 @@ function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
               {mode === 'login' ? (
                 <>
                   アカウントをお持ちでない方は{' '}
-                  <button type="button" onClick={() => setMode('signup')} className="font-bold text-[#3B82F6] hover:text-[#2563EB] transition">
+                  <button type="button" onClick={() => { setMode('signup'); setMessage(''); setInfo(''); }} className="font-bold text-[#067f95] transition hover:text-[#045f70]">
                     新規登録
                   </button>
                 </>
               ) : (
                 <>
                   すでにアカウントをお持ちの方は{' '}
-                  <button type="button" onClick={() => setMode('login')} className="font-bold text-[#3B82F6] hover:text-[#2563EB] transition">
+                  <button type="button" onClick={() => { setMode('login'); setMessage(''); setInfo(''); }} className="font-bold text-[#067f95] transition hover:text-[#045f70]">
                     ログイン
                   </button>
                 </>
@@ -1051,7 +1097,7 @@ function UploadView({
             <input
               ref={inputRef}
               type="file"
-              accept="image/jpeg,image/png,image/heic,image/heif"
+              accept="image/jpeg,image/png,image/heic,image/heif,image/webp"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -1544,6 +1590,27 @@ export default function MemoryMapApp() {
   );
 
   const handleFile = async (file: File) => {
+    if (!acceptedImageTypes.has(file.type)) {
+      setUpload({
+        ...emptyUpload,
+        status: 'error',
+        fileName: file.name,
+        fileSize: formatFileSize(file.size),
+        message: 'JPG / PNG / HEIC / WebP形式の画像を選択してください',
+      });
+      return;
+    }
+    if (file.size > maxUploadBytes) {
+      setUpload({
+        ...emptyUpload,
+        status: 'error',
+        fileName: file.name,
+        fileSize: formatFileSize(file.size),
+        message: '画像サイズは8MB以下にしてください',
+      });
+      return;
+    }
+
     const previewUrl = await readFileAsDataUrl(file);
     setUpload({
       fileName: file.name,
@@ -1606,9 +1673,21 @@ export default function MemoryMapApp() {
     }));
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (hasSupabaseConfig && supabase) {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) {
+          throw new Error('ログインが必要です');
+        }
+        headers.Authorization = `Bearer ${token}`;
+      } else {
+        throw new Error('Supabase is not configured');
+      }
+
       const response = await fetch('/api/predict-location', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ image: upload.previewUrl }),
       });
 
@@ -1617,6 +1696,17 @@ export default function MemoryMapApp() {
       }
 
       const result = await response.json();
+      if (
+        typeof result.latitude !== 'number' ||
+        typeof result.longitude !== 'number' ||
+        typeof result.placeName !== 'string' ||
+        result.latitude < -90 ||
+        result.latitude > 90 ||
+        result.longitude < -180 ||
+        result.longitude > 180
+      ) {
+        throw new Error('Invalid AI response');
+      }
       
       setUpload((prev) => ({
         ...prev,
