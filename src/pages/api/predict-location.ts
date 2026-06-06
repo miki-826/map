@@ -64,7 +64,13 @@ export const POST: APIRoute = async ({ request }) => {
       },
     });
 
-    const text = response.text();
+    const text = response.text ?? '';
+    if (!text) {
+      return new Response(JSON.stringify({ error: 'Empty response from AI' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     let result;
     try {
       result = JSON.parse(text);
